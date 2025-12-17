@@ -1,36 +1,54 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Clipline
 
-## Getting Started
+Welcome to **Clipline** – a web application for effortless screen recording, sharing, and managing your videos!
 
-First, run the development server:
+## Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- 🎥 **Screen Record**: Easily record your screen right from the browser.
+- 🔗 **Share Public Link**: Instantly generate a shareable public link for your recordings.
+- ✂️ **Trim Videos**: Quickly trim your recordings to keep only what matters.
+- 📊 **Video Analytics**: Track views and engagement for each video with built-in analytics.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Setup
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+To run Clipline locally:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. **Clone the repository:**
 
-## Learn More
+   ```bash
+   git clone https://github.com/your-username/clipline.git
+   cd clipline
+   ```
 
-To learn more about Next.js, take a look at the following resources:
+2. **Install dependencies:**
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+   ```bash
+   npm install
+   # or
+   yarn install
+   ```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+3. **Configure environment variables:**
 
-## Deploy on Vercel
+   - Copy `.env.example` to `.env` and fill in the required values, such as your MongoDB connection string.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+4. **Run the development server:**
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+   ```bash
+   npm run dev
+   # or
+   yarn dev
+   ```
+
+   The app will be available at [http://localhost:3000](http://localhost:3000).
+
+## Get Started
+
+1. Record your first video.
+2. Edit and trim as needed.
+3. Share your video with a public link.
+4. Monitor viewer analytics!
+
+---
+
+Built for creators, educators, and teams who need to share knowledge, demos, and walkthroughs with ease.
