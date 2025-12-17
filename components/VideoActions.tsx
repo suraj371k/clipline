@@ -1,4 +1,4 @@
-"use client";
+ "use client";
 
 import { Share2 } from "lucide-react";
 import toast from "react-hot-toast";
@@ -11,7 +11,7 @@ interface VideoActionsProps {
 export default function VideoActions({ videoUrl, title }: VideoActionsProps) {
   const handleCopyLink = () => {
     navigator.clipboard.writeText(window.location.href);
-    toast.success("Link copied successfully!")
+    toast.success("Link copied successfully!");
   };
 
   return (

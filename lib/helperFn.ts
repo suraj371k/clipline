@@ -14,17 +14,17 @@ export async function createVideo(data: {
   thumbnailUrl?: string;
 }) {
   await connectDB();
-  
+
   const video = new Video(data);
   await video.save();
-  
+
   return video;
 }
 
 // Get video by shareId
 export async function getVideoByShareId(shareId: string) {
   await connectDB();
-  
+
   const video = await Video.findOne({ shareId }).lean();
   return video;
 }
@@ -32,19 +32,19 @@ export async function getVideoByShareId(shareId: string) {
 // Get video by ID
 export async function getVideoById(videoId: string) {
   await connectDB();
-  
+
   if (!mongoose.Types.ObjectId.isValid(videoId)) {
     return null;
   }
-  
+
   const video = await Video.findById(videoId).lean();
   return video;
 }
 
-// Increment video 
+// Increment video
 export async function incrementVideoViews(shareId: string) {
   await connectDB();
-  
+
   // Views are calculated from analytics count
   return true;
 }
@@ -58,11 +58,11 @@ export async function trackAnalytics(data: {
   ip?: string;
 }) {
   await connectDB();
-  
+
   if (!mongoose.Types.ObjectId.isValid(data.videoId)) {
-    throw new Error('Invalid video ID');
+    throw new Error("Invalid video ID");
   }
-  
+
   const analytic = new Analytic({
     videoId: data.videoId,
     completionPercentage: data.completionPercentage,
@@ -70,7 +70,7 @@ export async function trackAnalytics(data: {
     userAgent: data.userAgent,
     ip: data.ip,
   });
-  
+
   await analytic.save();
   return analytic;
 }
@@ -78,7 +78,7 @@ export async function trackAnalytics(data: {
 // Get video analytics
 export async function getVideoAnalytics(videoId: string) {
   await connectDB();
-  
+
   if (!mongoose.Types.ObjectId.isValid(videoId)) {
     return {
       totalViews: 0,
@@ -88,23 +88,34 @@ export async function getVideoAnalytics(videoId: string) {
       viewsOverTime: [],
     };
   }
-  
-  const analytics = await Analytic.find({ videoId }).sort({ createdAt: -1 }).lean();
-  
+
+  const analytics = await Analytic.find({ videoId })
+    .sort({ createdAt: -1 })
+    .lean();
+
   const totalViews = analytics.length;
-  const avgCompletion = totalViews > 0
-    ? Math.round(analytics.reduce((sum, a) => sum + a.completionPercentage, 0) / totalViews)
-    : 0;
-  
-  const totalWatchTime = analytics.reduce((sum, a) => sum + (a.watchDuration || 0), 0);
-  const completedViews = analytics.filter(a => a.completionPercentage === 100).length;
-  
+  const avgCompletion =
+    totalViews > 0
+      ? Math.round(
+          analytics.reduce((sum, a) => sum + a.completionPercentage, 0) /
+            totalViews
+        )
+      : 0;
+
+  const totalWatchTime = analytics.reduce(
+    (sum, a) => sum + (a.watchDuration || 0),
+    0
+  );
+  const completedViews = analytics.filter(
+    (a) => a.completionPercentage === 100
+  ).length;
+
   return {
     totalViews,
     avgCompletion,
     totalWatchTime: Math.round(totalWatchTime / 1000), // Convert to seconds
     completedViews,
-    viewsOverTime: analytics.map(a => ({
+    viewsOverTime: analytics.map((a) => ({
       date: a.createdAt,
       completion: a.completionPercentage,
       duration: a.watchDuration,
@@ -115,26 +126,106 @@ export async function getVideoAnalytics(videoId: string) {
 // Get all videos
 export async function getAllVideos(limit = 10) {
   await connectDB();
-  
-  const videos = await Video.find()
-    .sort({ createdAt: -1 })
-    .limit(limit)
-    .lean();
-  
-  return videos;
+
+  const videos = await Video.find().sort({ createdAt: -1 }).limit(limit).lean();
+
+  return videos.map((video) => {
+    const createdAt = video.createdAt
+      ? new Date(video.createdAt).toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        })
+      : "Unknown date";
+
+    return {
+      ...video,
+      _id: video._id.toString(),
+      createdAt: video.createdAt?.toISOString(),
+      createdAtFormatted: createdAt,
+      updatedAt: video.updatedAt?.toISOString(),
+    };
+  });
 }
 
-// Delete video
-export async function deleteVideo(videoId: string) {
+// Get overall analytics (aggregate across all videos)
+export async function getOverallAnalytics() {
   await connectDB();
+
+  // Get all analytics
+  const allAnalytics = await Analytic.find().lean();
+
+  // Get all videos with their analytics
+  const videos = await Video.find().lean();
   
-  if (!mongoose.Types.ObjectId.isValid(videoId)) {
-    throw new Error('Invalid video ID');
-  }
+  const videoAnalyticsMap = new Map();
   
-  // Delete video and its analytics
-  await Video.findByIdAndDelete(videoId);
-  await Analytic.deleteMany({ videoId });
-  
-  return true;
+  // Group analytics by video
+  allAnalytics.forEach((analytic) => {
+    const videoId = analytic.videoId.toString();
+    if (!videoAnalyticsMap.has(videoId)) {
+      videoAnalyticsMap.set(videoId, []);
+    }
+    videoAnalyticsMap.get(videoId).push(analytic);
+  });
+
+  // Calculate per-video stats
+  const videoStats = videos.map((video) => {
+    const analytics = videoAnalyticsMap.get(video._id.toString()) || [];
+    const totalViews = analytics.length;
+    const avgCompletion =
+      totalViews > 0
+        ? Math.round(
+            analytics.reduce((sum: number, a: any) => sum + a.completionPercentage, 0) /
+              totalViews
+          )
+        : 0;
+    const totalWatchTime = analytics.reduce(
+      (sum: number, a: any) => sum + (a.watchDuration || 0),
+      0
+    );
+    const completedViews = analytics.filter(
+      (a: any) => a.completionPercentage === 100
+    ).length;
+
+    return {
+      videoId: video._id.toString(),
+      title: video.title,
+      shareId: video.shareId,
+      totalViews,
+      avgCompletion,
+      totalWatchTime: Math.round(totalWatchTime / 1000), // Convert to seconds
+      completedViews,
+      createdAt: video.createdAt,
+    };
+  });
+
+  // Calculate overall stats
+  const totalViews = allAnalytics.length;
+  const avgCompletion =
+    totalViews > 0
+      ? Math.round(
+          allAnalytics.reduce((sum: number, a: any) => sum + a.completionPercentage, 0) /
+            totalViews
+        )
+      : 0;
+  const totalWatchTime = allAnalytics.reduce(
+    (sum: number, a: any) => sum + (a.watchDuration || 0),
+    0
+  );
+  const completedViews = allAnalytics.filter(
+    (a: any) => a.completionPercentage === 100
+  ).length;
+
+  return {
+    overall: {
+      totalViews,
+      avgCompletion,
+      totalWatchTime: Math.round(totalWatchTime / 1000), // Convert to seconds
+      completedViews,
+      totalVideos: videos.length,
+    },
+    byVideo: videoStats.sort((a, b) => b.totalViews - a.totalViews), // Sort by views descending
+  };
 }
+

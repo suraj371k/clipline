@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
     console.log("Video saved:", video._id);
 
     return NextResponse.json({
-      success: true,
+      success: true, 
       videoId: video._id.toString(),
       shareId,
       videoUrl,

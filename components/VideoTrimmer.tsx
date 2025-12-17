@@ -1,9 +1,16 @@
+ "use client";
 import React, { useState, useRef, useEffect } from "react";
-import { FFmpeg } from "@ffmpeg/ffmpeg";
+import type { FFmpeg } from "@ffmpeg/ffmpeg";
 import { toBlobURL, fetchFile } from "@ffmpeg/util";
 import { Upload, Loader2, AlertCircle } from "lucide-react";
 
-export default function VideoTrimmer() {
+interface VideoTrimmerProps {
+  // Optional existing video to trim (e.g. from library)
+  sourceUrl?: string;
+  title?: string;
+}
+
+export default function VideoTrimmer({ sourceUrl, title }: VideoTrimmerProps) {
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string>("");
   const [duration, setDuration] = useState<number>(0);
@@ -17,14 +24,34 @@ export default function VideoTrimmer() {
   const [processingLog, setProcessingLog] = useState<string>("");
 
   const videoRef = useRef<HTMLVideoElement>(null);
-  const ffmpegRef = useRef<FFmpeg>(new FFmpeg());
+  const ffmpegRef = useRef<FFmpeg | null>(null);
 
   useEffect(() => {
     loadFFmpeg();
   }, []);
 
+  // If a sourceUrl is provided (e.g. from the library), use it as the initial video
+  useEffect(() => {
+    if (sourceUrl) {
+      setVideoUrl(sourceUrl);
+      setTrimmedUrl("");
+      setError("");
+      setProcessingLog("");
+      setVideoFile(null);
+    }
+  }, [sourceUrl]);
+
   const loadFFmpeg = async () => {
+    // Ensure we only run in the browser
+    if (typeof window === "undefined") return;
+
+    if (!ffmpegRef.current) {
+      const { FFmpeg } = await import("@ffmpeg/ffmpeg");
+      ffmpegRef.current = new FFmpeg();
+    }
+
     const ffmpeg = ffmpegRef.current;
+    if (!ffmpeg) return;
 
     ffmpeg.on("log", ({ message }) => {
       console.log(message);
@@ -73,7 +100,7 @@ export default function VideoTrimmer() {
   };
 
   const trimVideo = async () => {
-    if (!videoFile || !ffmpegLoaded) return;
+    if ((!videoFile && !videoUrl) || !ffmpegLoaded) return;
 
     setIsProcessing(true);
     setError("");
@@ -81,16 +108,28 @@ export default function VideoTrimmer() {
     const ffmpeg = ffmpegRef.current;
 
     try {
-      // Write input file
+      // Determine input source: uploaded file or existing URL
+      const inputSource: File | string = videoFile ?? videoUrl ?? "";
+
       setProcessingLog("Reading input file...");
-      await ffmpeg.writeFile("input.webm", await fetchFile(videoFile));
+
+      // Derive a virtual input file name with extension for ffmpeg
+      let inputExt = "webm";
+      if (inputSource instanceof File) {
+        inputExt =
+          inputSource.name.split(".").pop()?.toLowerCase() || "webm";
+      } else if (typeof inputSource === "string") {
+        const urlPath = inputSource.split("?")[0];
+        inputExt =
+          urlPath.split(".").pop()?.toLowerCase() || "mp4";
+      }
+
+      const inputName = `input.${inputExt}`;
+
+      await ffmpeg.writeFile(inputName, await fetchFile(inputSource));
 
       // Calculate trim duration
       const trimDuration = endTime - startTime;
-
-      // Determine output format and codec strategy
-      const inputExt = videoFile.name.split(".").pop()?.toLowerCase() || "webm";
-      const isInputWebM = inputExt === "webm";
 
       setProcessingLog(`Input format: ${inputExt}`);
       setProcessingLog(
@@ -105,7 +144,7 @@ export default function VideoTrimmer() {
         setProcessingLog("Attempting fast copy (no re-encoding)...");
         await ffmpeg.exec([
           "-i",
-          "input.webm",
+          inputName,
           "-ss",
           startTime.toString(),
           "-t",
@@ -121,7 +160,7 @@ export default function VideoTrimmer() {
         // Re-encode to MP4 with H.264
         await ffmpeg.exec([
           "-i",
-          "input.webm",
+          inputName,
           "-ss",
           startTime.toString(),
           "-t",
@@ -159,7 +198,7 @@ export default function VideoTrimmer() {
 
       // Clean up files
       try {
-        await ffmpeg.deleteFile("input.webm");
+        await ffmpeg.deleteFile(inputName);
         await ffmpeg.deleteFile(outputFile);
       } catch (cleanupError) {
         console.log("Cleanup warning:", cleanupError);

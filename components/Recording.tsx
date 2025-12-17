@@ -11,21 +11,28 @@ import {
   PlayCircle,
   Upload,
   Loader,
+  Pause,
+  RotateCcw,
 } from "lucide-react";
 
 
 export default function VideoRecorder() {
   const [isRecording, setIsRecording] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string>("");
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadResult, setUploadResult] = useState<any>(null);
   const [title, setTitle] = useState("My Recording");
-  const [autoSave, setAutoSave] = useState(true); 
+  const [autoSave, setAutoSave] = useState(true);
+  const [recordingDuration, setRecordingDuration] = useState(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const recordingStartTimeRef = useRef<number>(0);
+  const pausedTimeRef = useRef<number>(0);
+  const totalPausedTimeRef = useRef<number>(0);
 
   const startRecording = async () => {
     try {
@@ -88,9 +95,41 @@ export default function VideoRecorder() {
 
       mediaRecorder.start(100); // Collect data every 100ms
       setIsRecording(true);
+      setIsPaused(false);
+      setRecordingDuration(0);
+      recordingStartTimeRef.current = Date.now();
+      totalPausedTimeRef.current = 0;
+      pausedTimeRef.current = 0;
     } catch (err) {
       console.error("Error starting recording:", err);
       alert("Failed to start recording. Please allow screen and audio access.");
+    }
+  };
+
+  const pauseRecording = () => {
+    if (mediaRecorderRef.current && isRecording && !isPaused) {
+      try {
+        mediaRecorderRef.current.pause();
+        setIsPaused(true);
+        pausedTimeRef.current = Date.now();
+      } catch (err) {
+        console.error("Error pausing recording:", err);
+      }
+    }
+  };
+
+  const resumeRecording = () => {
+    if (mediaRecorderRef.current && isRecording && isPaused) {
+      try {
+        mediaRecorderRef.current.resume();
+        // Add the paused duration to total paused time
+        const pausedDuration = Date.now() - pausedTimeRef.current;
+        totalPausedTimeRef.current += pausedDuration;
+        setIsPaused(false);
+        pausedTimeRef.current = 0;
+      } catch (err) {
+        console.error("Error resuming recording:", err);
+      }
     }
   };
 
@@ -98,6 +137,10 @@ export default function VideoRecorder() {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
+      setIsPaused(false);
+      recordingStartTimeRef.current = 0;
+      totalPausedTimeRef.current = 0;
+      pausedTimeRef.current = 0;
     }
   };
 
@@ -191,6 +234,28 @@ export default function VideoRecorder() {
       .padStart(2, "0")}`;
   };
 
+  // Timer effect for recording duration
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+
+    if (isRecording && !isPaused) {
+      interval = setInterval(() => {
+        const elapsed = Math.floor(
+          (Date.now() - recordingStartTimeRef.current - totalPausedTimeRef.current) / 1000
+        );
+        setRecordingDuration(elapsed);
+      }, 1000); // Update every second
+    } else if (!isRecording) {
+      setRecordingDuration(0);
+    }
+
+    return () => {
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
+  }, [isRecording, isPaused]);
+
   useEffect(() => {
     return () => {
       if (previewUrl) {
@@ -235,20 +300,39 @@ export default function VideoRecorder() {
                     />
                   ) : isRecording ? (
                     <div className="text-center">
-                      <div className="relative inline-block mb-4">
-                        <div className="w-16 h-16 bg-red-500 rounded-full animate-pulse"></div>
-                        <div className="absolute inset-0 border-4 border-red-300 rounded-full animate-ping"></div>
-                      </div>
-                      <p className="text-white font-medium">
-                        Recording in progress...
-                      </p>
-                      <p className="text-gray-400 text-sm mt-2">
-                        Your screen is being captured
-                      </p>
-                      {autoSave && (
-                        <p className="text-blue-400 text-sm mt-2">
-                          Auto-save enabled
-                        </p>
+                      {isPaused ? (
+                        <>
+                          <div className="relative inline-block mb-4">
+                            <div className="w-16 h-16 bg-yellow-500 rounded-full"></div>
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <Pause size={32} className="text-white" />
+                            </div>
+                          </div>
+                          <p className="text-white font-medium">
+                            Recording Paused
+                          </p>
+                          <p className="text-gray-400 text-sm mt-2">
+                            Click Resume to continue recording
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <div className="relative inline-block mb-4">
+                            <div className="w-16 h-16 bg-red-500 rounded-full animate-pulse"></div>
+                            <div className="absolute inset-0 border-4 border-red-300 rounded-full animate-ping"></div>
+                          </div>
+                          <p className="text-white font-medium">
+                            Recording in progress...
+                          </p>
+                          <p className="text-gray-400 text-sm mt-2">
+                            Your screen is being captured
+                          </p>
+                          {autoSave && (
+                            <p className="text-blue-400 text-sm mt-2">
+                              Auto-save enabled
+                            </p>
+                          )}
+                        </>
                       )}
                     </div>
                   ) : (
@@ -352,8 +436,12 @@ export default function VideoRecorder() {
                               </p>
                               <p className="text-sm text-green-600">
                                 Duration:{" "}
-                                {formatDuration(uploadResult.duration)} • Size:{" "}
-                                {(uploadResult.size / (1024 * 1024)).toFixed(2)}
+                                {formatDuration(uploadResult.duration || 0)} • Size:{" "}
+                                {uploadResult.size && !isNaN(uploadResult.size)
+                                  ? (uploadResult.size / (1024 * 1024)).toFixed(2)
+                                  : recordedBlob
+                                  ? (recordedBlob.size / (1024 * 1024)).toFixed(2)
+                                  : "0.00"}
                                 MB
                               </p>
                             </div>
@@ -383,21 +471,38 @@ export default function VideoRecorder() {
               <div className="p-6 md:p-8">
                 {/* Recording Status */}
                 {isRecording && (
-                  <div className="mb-6 p-4 bg-linear-to-r from-red-50 to-orange-50 border border-red-100 rounded-xl">
+                  <div className={`mb-6 p-4 border rounded-xl ${
+                    isPaused 
+                      ? "bg-linear-to-r from-yellow-50 to-orange-50 border-yellow-100" 
+                      : "bg-linear-to-r from-red-50 to-orange-50 border-red-100"
+                  }`}>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <div className="relative">
-                          <div className="w-3 h-3 bg-red-600 rounded-full"></div>
-                          <div className="absolute inset-0 w-3 h-3 bg-red-400 rounded-full animate-ping"></div>
+                          {isPaused ? (
+                            <>
+                              <div className="w-3 h-3 bg-yellow-600 rounded-full"></div>
+                              <div className="absolute inset-0 w-3 h-3 bg-yellow-400 rounded-full"></div>
+                            </>
+                          ) : (
+                            <>
+                              <div className="w-3 h-3 bg-red-600 rounded-full"></div>
+                              <div className="absolute inset-0 w-3 h-3 bg-red-400 rounded-full animate-ping"></div>
+                            </>
+                          )}
                         </div>
                         <div>
-                          <p className="font-semibold text-red-800">
-                            Recording Active
+                          <p className={`font-semibold ${
+                            isPaused ? "text-yellow-800" : "text-red-800"
+                          }`}>
+                            {isPaused ? "Recording Paused" : "Recording Active"}
                           </p>
-                          <p className="text-sm text-red-600">
-                            Screen + Audio • Live
+                          <p className={`text-sm ${
+                            isPaused ? "text-yellow-600" : "text-red-600"
+                          }`}>
+                            {isPaused ? "Paused • Click Resume to continue" : "Screen + Audio • Live"}
                           </p>
-                          {autoSave && (
+                          {autoSave && !isPaused && (
                             <p className="text-sm text-blue-600">
                               Auto-save enabled
                             </p>
@@ -405,8 +510,12 @@ export default function VideoRecorder() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <div className="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-medium">
-                          <span className="font-mono">00:00</span>
+                        <div className={`px-3 py-1 rounded-full text-sm font-medium ${
+                          isPaused 
+                            ? "bg-yellow-100 text-yellow-800" 
+                            : "bg-red-100 text-red-800"
+                        }`}>
+                          <span className="font-mono">{formatDuration(recordingDuration)}</span>
                         </div>
                       </div>
                     </div>
@@ -432,20 +541,53 @@ export default function VideoRecorder() {
                       </div>
                     </button>
                   ) : (
-                    <button
-                      onClick={stopRecording}
-                      className="flex-1 flex items-center justify-center gap-3 bg-linear-to-r from-gray-800 to-gray-900 text-white px-8 py-4 rounded-xl hover:from-gray-900 hover:to-black transition-all duration-300 shadow-lg hover:shadow-xl"
-                    >
-                      <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-                        <Square size={18} />
-                      </div>
-                      <div className="text-left">
-                        <p className="font-semibold text-lg">Stop Recording</p>
-                        <p className="text-sm opacity-90">
-                          {autoSave ? "Stop & Save to Cloud" : "Stop & Preview"}
-                        </p>
-                      </div>
-                    </button>
+                    <>
+                      {isPaused ? (
+                        <button
+                          onClick={resumeRecording}
+                          className="flex-1 flex items-center justify-center gap-3 bg-linear-to-r from-green-600 to-green-700 text-white px-8 py-4 rounded-xl hover:from-green-700 hover:to-green-800 transition-all duration-300 shadow-lg hover:shadow-xl"
+                        >
+                          <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                            <Play size={20} className="ml-0.5" />
+                          </div>
+                          <div className="text-left">
+                            <p className="font-semibold text-lg">Resume Recording</p>
+                            <p className="text-sm opacity-90">
+                              Continue recording
+                            </p>
+                          </div>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={pauseRecording}
+                          className="flex-1 flex items-center justify-center gap-3 bg-linear-to-r from-yellow-600 to-yellow-700 text-white px-8 py-4 rounded-xl hover:from-yellow-700 hover:to-yellow-800 transition-all duration-300 shadow-lg hover:shadow-xl"
+                        >
+                          <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                            <Pause size={20} />
+                          </div>
+                          <div className="text-left">
+                            <p className="font-semibold text-lg">Pause Recording</p>
+                            <p className="text-sm opacity-90">
+                              Temporarily pause
+                            </p>
+                          </div>
+                        </button>
+                      )}
+                      <button
+                        onClick={stopRecording}
+                        className="flex-1 flex items-center justify-center gap-3 bg-linear-to-r from-gray-800 to-gray-900 text-white px-8 py-4 rounded-xl hover:from-gray-900 hover:to-black transition-all duration-300 shadow-lg hover:shadow-xl"
+                      >
+                        <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                          <Square size={18} />
+                        </div>
+                        <div className="text-left">
+                          <p className="font-semibold text-lg">Stop Recording</p>
+                          <p className="text-sm opacity-90">
+                            {autoSave ? "Stop & Save to Cloud" : "Stop & Preview"}
+                          </p>
+                        </div>
+                      </button>
+                    </>
                   )}
 
                   {/* Manual Upload Button (when auto-save is off) */}
