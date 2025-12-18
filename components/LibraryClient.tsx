@@ -93,11 +93,6 @@ export default function LibraryClient({
                   <span>
                     {video.createdAtFormatted || "Unknown date"}
                   </span>
-                  {video.duration && (
-                    <span className="rounded bg-gray-100 px-2 py-0.5">
-                      {Math.round(video.duration / 1000)}s
-                    </span>
-                  )}
                 </div>
 
                 {/* Actions */}
