@@ -1,4 +1,4 @@
- "use client";
+"use client";
 import React, { useState, useRef, useEffect } from "react";
 import type { FFmpeg } from "@ffmpeg/ffmpeg";
 import { toBlobURL, fetchFile } from "@ffmpeg/util";
@@ -116,12 +116,16 @@ export default function VideoTrimmer({ sourceUrl, title }: VideoTrimmerProps) {
       // Derive a virtual input file name with extension for ffmpeg
       let inputExt = "webm";
       if (inputSource instanceof File) {
-        inputExt =
-          inputSource.name.split(".").pop()?.toLowerCase() || "webm";
+        inputExt = inputSource.name.split(".").pop()?.toLowerCase() || "webm";
       } else if (typeof inputSource === "string") {
         const urlPath = inputSource.split("?")[0];
-        inputExt =
-          urlPath.split(".").pop()?.toLowerCase() || "mp4";
+        inputExt = urlPath.split(".").pop()?.toLowerCase() || "mp4";
+      }
+
+      if (!ffmpeg) {
+        setError("Video processor is not ready. Please reload the page.");
+        setIsProcessing(false);
+        return;
       }
 
       const inputName = `input.${inputExt}`;
@@ -187,7 +191,17 @@ export default function VideoTrimmer({ sourceUrl, title }: VideoTrimmerProps) {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       const data = await ffmpeg.readFile(outputFile);
-      const blob = new Blob([data], { type: mimeType });
+
+      let uint8: Uint8Array;
+
+      if (typeof data === "string") {
+        uint8 = new TextEncoder().encode(data);
+      } else {
+        uint8 = new Uint8Array(data);
+      }
+
+      const blob = new Blob([uint8.slice().buffer], { type: mimeType });
+
       const url = URL.createObjectURL(blob);
 
       setProcessingLog(
@@ -284,10 +298,7 @@ export default function VideoTrimmer({ sourceUrl, title }: VideoTrimmerProps) {
         {/* Error Display */}
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
-            <AlertCircle
-              className="text-red-600 shrink-0 mt-0.5"
-              size={20}
-            />
+            <AlertCircle className="text-red-600 shrink-0 mt-0.5" size={20} />
             <div>
               <div className="font-medium text-red-800">Error</div>
               <div className="text-sm text-red-700">{error}</div>
